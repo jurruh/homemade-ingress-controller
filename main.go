@@ -14,6 +14,27 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+var hostTarget = map[string]string{}
+
+type baseHandle struct{}
+
+func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+
+	if target, ok := hostTarget[host]; ok {
+		remoteUrl, err := url.Parse(target)
+		if err != nil {
+			log.Println("target parse fail:", err)
+			return
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(remoteUrl)
+		proxy.ServeHTTP(w, r)
+		return
+	}
+	w.Write([]byte("403: Host forbidden " + host))
+}
+
 func main() {
 	fmt.Println("Starting Ingress Controller!")
 
@@ -36,27 +57,18 @@ func main() {
 	ingresses, _ := clientset.NetworkingV1beta1().Ingresses("").List(v1.ListOptions{})
 
 	for _, ingress := range ingresses.Items {
-		fmt.Println(ingress.Spec.Rules[0].Host)
+		backend := ingress.Spec.Rules[0].IngressRuleValue.HTTP.Paths[0].Backend
+		hostTarget[ingress.Spec.Rules[0].Host] = "http://" + backend.ServiceName + ":" + backend.ServicePort.String()
 	}
 
-	fmt.Println("Start http")
+	fmt.Println(hostTarget)
 
-	targetURL := "https://google.com"
+	h := &baseHandle{}
+	http.Handle("/", h)
 
-	u, err := url.Parse(targetURL)
-	if err != nil {
-		log.Fatalf("Could not parse downstream url: %s", targetURL)
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: h,
 	}
-
-	proxy := httputil.NewSingleHostReverseProxy(u)
-
-	director := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		director(req)
-		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
-		req.Host = req.URL.Host
-	}
-
-	http.HandleFunc("/", proxy.ServeHTTP)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(server.ListenAndServe())
 }
