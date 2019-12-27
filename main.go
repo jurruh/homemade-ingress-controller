@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,9 +31,6 @@ func headers(w http.ResponseWriter, req *http.Request) {
 func main() {
 	fmt.Println("Starting Ingress Controller!")
 
-	http.HandleFunc("/hello", hello)
-	http.HandleFunc("/headers", headers)
-
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		fmt.Println("No in cluster config trying to use ~/.kube/config")
@@ -49,7 +49,28 @@ func main() {
 
 	ingresses, _ := clientset.NetworkingV1beta1().Ingresses("").List(v1.ListOptions{})
 
-	fmt.Print(ingresses)
+	for _, ingress := range ingresses.Items {
+		fmt.Println(ingress.Spec.Rules[0].Host)
+	}
 
-	http.ListenAndServe(":8080", nil)
+	fmt.Println("Start http")
+
+	targetURL := "https://google.com"
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		log.Fatalf("Could not parse downstream url: %s", targetURL)
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(u)
+
+	director := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		director(req)
+		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
+		req.Host = req.URL.Host
+	}
+
+	http.HandleFunc("/", proxy.ServeHTTP)
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
