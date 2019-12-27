@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func hello(w http.ResponseWriter, req *http.Request) {
@@ -34,8 +36,15 @@ func main() {
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err.Error())
+		fmt.Println("No in cluster config trying to use ~/.kube/config")
+		home, _ := os.UserHomeDir()
+		config, err = clientcmd.BuildConfigFromFlags("", home+"/.kube/config")
+
+		if err != nil {
+			panic(err)
+		}
 	}
+
 	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
