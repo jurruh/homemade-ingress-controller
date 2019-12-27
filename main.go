@@ -58,7 +58,7 @@ func main() {
 
 	for _, ingress := range ingresses.Items {
 		backend := ingress.Spec.Rules[0].IngressRuleValue.HTTP.Paths[0].Backend
-		hostTarget[ingress.Spec.Rules[0].Host] = "http://" + backend.ServiceName + ":" + backend.ServicePort.String()
+		hostTarget[ingress.Spec.Rules[0].Host] = "http://" + backend.ServiceName + "." + ingress.ObjectMeta.Namespace + ":" + backend.ServicePort.String()
 	}
 
 	fmt.Println(hostTarget)
