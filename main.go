@@ -14,14 +14,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-var hostTarget = map[string]string{}
+var hostTargets = map[string]string{}
 
 type baseHandle struct{}
 
 func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 
-	if target, ok := hostTarget[host]; ok {
+	if target, ok := hostTargets[host]; ok {
 		remoteUrl, err := url.Parse(target)
 		if err != nil {
 			log.Println("target parse fail:", err)
@@ -58,10 +58,8 @@ func main() {
 
 	for _, ingress := range ingresses.Items {
 		backend := ingress.Spec.Rules[0].IngressRuleValue.HTTP.Paths[0].Backend
-		hostTarget[ingress.Spec.Rules[0].Host] = "http://" + backend.ServiceName + "." + ingress.ObjectMeta.Namespace + ":" + backend.ServicePort.String()
+		hostTargets[ingress.Spec.Rules[0].Host] = "http://" + backend.ServiceName + "." + ingress.ObjectMeta.Namespace + ":" + backend.ServicePort.String()
 	}
-
-	fmt.Println(hostTarget)
 
 	h := &baseHandle{}
 	http.Handle("/", h)
